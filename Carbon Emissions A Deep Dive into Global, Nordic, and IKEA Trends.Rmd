@@ -1,0 +1,422 @@
+---
+title: "Carbon Emissions"
+subtitle: "A Deep Dive into Global, Nordic, and IKEA Trends"
+author: "JingI Tu"
+papersize: a4
+geometry: margin=4cm
+colorlinks: true
+output:
+  pdf_document:
+    number_sections: true
+---
+
+```{r setup, include = FALSE}
+# Setup options for R Markdown
+knitr::opts_chunk$set(
+  echo       = FALSE,    # Do not print code
+  warning    = FALSE,    # Suppress warnings
+  message    = FALSE,    # Suppress messages
+  fig.align  = "center", # Center figures
+  fig.width  = 2.7,      # Good standard figure width for single-panel figures
+  fig.height = 2.4       # Good standard figure height for single-panel figures
+)
+
+library(tidyverse)
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(dplyr)
+library(readr)
+# Set a theme for ggplot2
+theme_set(theme_grey(base_size = 10))
+
+# Set options
+options(
+  digits = 3, # limit the number of significant digits
+  width  = 63 # limit the width of code output
+)
+```
+
+# Climate Crisis: A Call for Action
+
+In the face of severe climate change pressure, countries around the world are seeking effective emission reduction pathways to significantly reduce greenhouse gases and avoid catastrophic climate consequences. This report aims to explore the current state of global carbon emissions, policy responses in Europe, as well as the specific performance of Nordic countries and individual companies. We will analyze the global macro picture of carbon emissions, particularly focusing on the trends between 2002 and 2022, explore the guiding role of European policies, and finally use IKEA as a case study to propose suggestions for transparency and standardization of calculation methods.
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(RColorBrewer)
+library(knitr)
+library(kableExtra)
+library(patchwork)
+library(ggalluvial)
+library(zoo)
+# 读取 CSV 文件
+co2_data <- read.csv("GCB2022v27_MtCO2_flat.csv")
+
+co2_data <- co2_data %>%
+  filter(!Country %in% c("French Equatorial Africa", "Ryukyu Islands")) %>%
+  mutate(across(where(is.numeric), ~replace_na(., 0)))
+
+world_data <- co2_data %>% filter(`ISO.3166.1.alpha.3` == "WLD")
+transport_data <- co2_data %>% filter(Country == "International Transport")
+co2_data <- co2_data %>% filter(!Country %in% c("Global", "International Transport"))
+
+total_emissions <- co2_data %>%
+  mutate(Country = recode(Country,
+                          "USA" = "United States of America",
+                          "Czech Republic" = "Czechia",
+                          "Syria" = "Syria",
+                          "Viet Nam" = "Vietnam",
+                          "Ivory Coast" = "Côte d'Ivoire",
+                          "Swaziland" = "Eswatini",
+                          "Cape Verde" = "Cabo Verde",
+                          "Burma" = "Myanmar",
+                          "Macedonia" = "North Macedonia",
+                          "Antigua and Barbuda" = "Antigua and Barb.",
+                          "Bonaire, Saint Eustatius and Saba" = "Bonaire, Sint Eustatius and Saba",
+                          "Bosnia and Herzegovina" = "Bosnia and Herz.",
+                          "British Virgin Islands" = "British Virgin Is.",
+                          "Brunei Darussalam" = "Brunei",
+                          "Central African Republic" = "Central African Rep.",
+                          "Christmas Island" = "Christmas Is.",
+                          "Cook Islands" = "Cook Is.",
+                          "Democratic Republic of the Congo" = "Congo",
+                          "Dominican Republic" = "Dominican Republic",
+                          "Equatorial Guinea" = "Equatorial Guinea",
+                          "Faeroe Islands" = "Faroe Islands",
+                          "Micronesia (Federated States of)" = "Micronesia",
+                          "Marshall Islands" = "Marshall Islands",
+                          "Mayotte" = "Mayotte",
+                          "Occupied Palestinian Territory" = "Palestine",
+                          "Pacific Islands (Palau)" = "Palau",
+                          "South Sudan" = "South Sudan",
+                          "Réunion" = "Reunion",
+                          "Sint Maarten (Dutch part)" = "Sint Maarten",
+                          "Sao Tome and Principe" = "São Tomé and Príncipe",
+                          "Solomon Islands" = "Solomon Islands",
+                          "Saint Kitts and Nevis" = "Saint Kitts and Nevis",
+                          "St. Kitts-Nevis-Anguilla" = "Saint Kitts and Nevis",
+                          "Saint Pierre and Miquelon" = "Saint Pierre and Miquelon",
+                          "Saint Vincent and the Grenadines" = "Saint Vincent and the Grenadines",
+                          "Turks and Caicos Islands" = "Turks and Caicos Islands",
+                          "Wallis and Futuna Islands" = "Wallis and Futuna",                          "Eritrea" = "Eritrea")) %>%
+  group_by(Country) %>%
+  summarise(Total_Emissions = sum(Total, na.rm = TRUE), 
+            Per_Capita_Emissions = sum(Per.Capita, na.rm = TRUE))
+```
+The CO2 emissions dataset used in this analysis is publicly available on Kaggle and can be accessed via the following link:
+https://www.kaggle.com/datasets/thedevastator/global-fossil-co2-emissions-by-country-2002-2022/
+The table below provides a brief description of the variables in the CO2 emissions dataset, to help understand the meaning and use of each variable.
+```{r}
+variable_descriptions <- data.frame(
+  Variable = c("Country", "ISO.3166.1.alpha.3", "Year", "Total", "Coal", "Oil", 
+               "Gas", "Cement", "Flaring", "Other", "Per.Capita"),
+  Description = c("Name of the country",
+                  "Three-letter ISO country code",
+                  "Year of the recorded emission data",
+                  "Total CO2 emissions (in megatonnes, Mt)",
+                  "CO2 emissions from coal combustion (in megatonnes, Mt)",
+                  "CO2 emissions from oil combustion (in megatonnes, Mt)",
+                  "CO2 emissions from natural gas combustion (in megatonnes, Mt)",
+                  "CO2 emissions from cement production (in megatonnes, Mt)",
+                  "CO2 emissions from gas flaring (in megatonnes, Mt)",
+                  "CO2 emissions from other sources (in megatonnes, Mt)",
+                  "Per capita CO2 emissions (in tonnes per person)")
+)
+
+variable_descriptions %>%
+  kable("latex", caption = "Description of Variables in the CO2 Emissions Dataset") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+# Analysis of Global Carbon Emissions
+we used a geographic visualization to map total emissions by country, providing an intuitive overview of how emissions vary globally. This approach enabled us to easily identify key countries with the highest emissions, like the United States, China, and Russia, and to understand the overall distribution of emissions across the world.
+
+The high carbon emissions of the United States, China, and Russia can be explained by a combination of factors. First, these countries have substantial economic scale and industrial activity. As major global economies, their levels of industrialization—particularly in heavy industry and manufacturing—result in significant carbon emissions. Additionally, their economic development drives a massive demand for energy, both for production and daily life, which further contributes to high emission levels.
+
+Moreover, the size and population of these nations play a crucial role. China has the largest population in the world, and both the U.S. and Russia cover vast geographic areas. This means extensive transportation, production, and consumption activities, all of which generate considerable carbon emissions. As a result, these factors together make the U.S., China, and Russia the leading contributors to global carbon emissions.
+```{r, fig.width=14, fig.height= 12}
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+world_co2 <- left_join(world, total_emissions, by = c("name" = "Country"))
+
+world_co2 %>%
+  ggplot() +
+  geom_sf(aes(fill = replace_na(Total_Emissions, 0))) +
+  scale_fill_gradientn(colors = c("lightgreen", "yellow", "orange", "red", "darkred"),
+                       na.value = "lightgreen", name = "Total CO2 Emissions (Mt)", labels = scales::comma) +
+  theme_minimal() +
+  coord_sf(crs = st_crs("+proj=robin")) + 
+  labs(title = "Global CO2 Emissions (Total)",
+       subtitle = "Total CO2 emissions per country",
+       caption = "Data source: GCB2022v27_MtCO2_flat.csv (values not in scientific notation)")
+```
+We noticed that the top three countries with the highest total emissions are all nations with vast land areas. Therefore, simply using total emissions to evaluate each country’s contribution to carbon emissions might be unfair. Due to their large land areas and significant populations, these countries inevitably require more resources and conduct more production activities, which in turn leads to higher carbon emissions. Thus, relying solely on total emissions doesn't fully reflect the carbon emission levels or the environmental impact of these countries.
+
+To provide a more equitable comparison, we introduced the concept of per capita emissions, which can more accurately measure the contribution of each resident to the country's carbon footprint. By analyzing per capita emissions, we can uncover differences in energy consumption, production activities, and lifestyle patterns within each country, and better understand how different nations are performing in terms of reducing carbon emissions.
+
+Specifically, we first selected the top 5 countries from the 30 highest emitters globally, aiming to identify those with the greatest impact on global emissions. We then extracted data on per capita carbon emissions from these countries over the period from 2002 to 2021 to observe their trends. By plotting a line graph, we can visually examine the changes in per capita emissions of these countries, which helps us understand the differences in their performances and their evolving trends over the last twenty years.
+
+```{r, fig.width=12, fig.height= 10}
+top30_total_all_time <- co2_data %>%
+  group_by(Country) %>%
+  summarise(Total_Emissions = sum(Total, na.rm = TRUE)) %>%
+  arrange(desc(Total_Emissions)) %>%
+  top_n(30, Total_Emissions)
+
+top10_total_from_top30 <- top30_total_all_time %>%
+  arrange(desc(Total_Emissions)) %>%
+  top_n(5, Total_Emissions)
+
+trend_data_2002_2021_top10 <- co2_data %>%
+  filter(Country %in% top10_total_from_top30$Country, Year >= 2002 & Year <= 2021) %>%
+  select(Country, Year, Per.Capita)
+
+trend_data_2002_2021_top10 %>%
+  ggplot(aes(x = Year, y = Per.Capita, color = Country)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Top 5 Countries by Per Capita CO2 Emissions from Top 30 Total Emitters (2002-2021)",
+       x = "Year",
+       y = "Per Capita CO2 Emissions (Mt)") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+The results show that among the top five countries with the highest per capita emissions, China, the United States, and Russia occupy three of these spots, indicating their significant influence on the global carbon emission landscape—not only in terms of total emissions but also in per capita terms. It is also notable that Germany and the United Kingdom are included in this list, highlighting that European countries also play a substantial role in carbon emissions. Therefore, we can infer that the European Union also holds considerable influence on this issue.
+
+This influence is further reflected in policies and international agreements such as the Paris Agreement (2015), which aims to limit global warming to below 2 degrees Celsius, and the European Green Deal, which sets a target for carbon neutrality by 2050. These initiatives demonstrate Europe’s significant role and leadership in global climate action and underscore the EU’s strong commitment to sustainable development. Taken together with the influence of China, the United States, and Russia, it is evident that addressing climate change effectively will require collective efforts and stronger policies from these key economic players and other nations worldwide.
+
+# Carbon Reduction in Nordic Countries
+Since the author is currently studying at Lund University, the following section will focus on a detailed analysis of the four Nordic countries—Sweden, Norway, Denmark, and Finland. We will explore these nations' specific situations regarding carbon emissions, conducting a component analysis of their emissions to reveal the different strategies and performance of each country in reducing carbon emissions. This analysis will not only help us understand how Nordic countries are addressing climate change but also reflect their role and contributions to carbon reduction efforts within Europe and on the global stage.
+```{r, fig.width=12, fig.height= 10}
+nordic_countries <- c("Sweden", "Norway", "Denmark", "Finland")
+nordic_data <- co2_data %>% 
+  filter(Country %in% nordic_countries, Year >= 2002)
+
+columns <- c("Coal", "Oil", "Gas", "Cement", "Flaring", "Other")
+melted_nordic_data <- nordic_data %>% 
+  select(Country, Year, all_of(columns)) %>%
+  pivot_longer(cols = -c(Country, Year), names_to = "Type", values_to = "Emissions")
+
+nordic_total_trend <- nordic_data %>%
+  group_by(Country, Year) %>%
+  summarise(Total_Emissions = sum(Total, na.rm = TRUE))
+
+ggplot(nordic_total_trend, aes(x = Year, y = Total_Emissions, color = Country)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ Country, scales = "free_y") +
+  labs(title = "Total CO2 Emissions Trends in Nordic Countries (2002-2021)",
+       x = "Year",
+       y = "Total Emissions (Mt)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+nordic_total_emissions <- nordic_data %>%
+  group_by(Country) %>%
+  summarise(
+    Coal = sum(Coal, na.rm = TRUE),
+    Oil = sum(Oil, na.rm = TRUE),
+    Gas = sum(Gas, na.rm = TRUE),
+    Cement = sum(Cement, na.rm = TRUE),
+    Flaring = sum(Flaring, na.rm = TRUE),
+    Other = sum(Other, na.rm = TRUE)
+  )
+
+melted_nordic_total <- nordic_total_emissions %>%
+  pivot_longer(cols = -Country, names_to = "Type", values_to = "Total_Emissions")
+
+ggplot(melted_nordic_total, aes(x = reorder(Country, -Total_Emissions), y = Total_Emissions, fill = Type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Total CO2 Emissions by Nordic Countries and Emission Types (2002-2021)",
+       x = "Country",
+       y = "Total Emissions (Mt)",
+       fill = "Emission Type") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+From the table above, we can observe that the Nordic countries have generally seen significant reductions in carbon emissions over the past two decades. This can be attributed to the strong environmental policies in the Nordic region, the large-scale adoption of renewable energy, and a firm commitment to reducing reliance on fossil fuels. In addition, the Nordic countries have implemented stringent carbon tax policies and actively participated in international climate agreements, such as the Paris Agreement, which have all significantly contributed to reducing carbon emissions.
+
+In terms of emission structure, the Nordic countries generally rely mainly on oil, while natural gas and coal are also important components. There are some differences among the four countries: in Sweden, coal has a much greater impact on emissions compared to natural gas, and Finland shows a similar pattern, though its coal emissions share is larger than Sweden's. In contrast, Norway primarily relies on natural gas, with coal having a much smaller impact. Lastly, Denmark's coal emissions are slightly higher than those from natural gas, though the difference is not as significant as in Sweden. These differences reflect each country's distinct energy structure and policies—Sweden and Finland are more reliant on coal, while Norway's abundant natural gas resources make it more dependent on gas.
+
+```{r, fig.width=12, fig.height= 10}
+nordic_emissions_start_end <- nordic_data %>%
+  filter(Year %in% c(2002, 2021)) %>%
+  select(Country, Year, Coal, Oil, Gas, Cement, Flaring, Other) %>% 
+  pivot_longer(cols = -c(Country, Year), names_to = "Type", values_to = "Emissions") %>%
+  group_by(Country, Type) %>%
+  summarise(
+    Start_Emissions = Emissions[Year == 2002],
+    End_Emissions = Emissions[Year == 2021],
+    .groups = 'drop'
+  ) %>%
+  mutate(Change = End_Emissions - Start_Emissions)
+
+reduced_emissions <- nordic_emissions_start_end %>%
+  filter(Change < 0) %>%
+  mutate(Reduction = abs(Change)) %>%
+  group_by(Country) %>%
+  mutate(Total_Reduction = sum(Reduction, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Contribution_Percent = (Reduction / Total_Reduction) * 100)
+
+ggplot(reduced_emissions, aes(x = Country, y = Contribution_Percent, fill = Type)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(title = "Contribution of Emission Types to Total Reduction in Nordic Countries (2002-2021)",
+       x = "Country",
+       y = "Contribution to Total Reduction (%)",
+       fill = "Emission Type") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+```
+This chart illustrates the contribution of different emission types to the total carbon reduction across the four Nordic countries. By calculating the reduction in each emission type from 2002 to 2021 and their respective proportions, we created this side-by-side bar chart to clearly display the contribution of different emission types to each country's reduction efforts.
+
+The results show that Sweden and Norway primarily reduced their oil emissions, while Denmark and Finland focused more on reducing coal emissions. This aligns with the carbon emission structure of each country, reflecting their unique energy usage characteristics and reduction priorities. Additionally, this suggests that these countries still have potential to further reduce their reliance on fossil fuels in the future.
+
+# Case Study: IKEA's Sustainability Report
+After our broad analysis of global emissions and a more focused examination of the four Nordic countries, we now turn to a specific case study: IKEA, the world’s largest and most influential Swedish furniture company. We will analyze the carbon emissions data from IKEA’s sustainability annual reports for the years 2019-2023, which can be downloaded from IKEA's official website. The aim of this analysis is to provide insight and guidance for other companies in their carbon reduction planning and evaluation processes, ultimately striving for improved transparency and highly interpretable assessment outcomes.
+```{r, fig.width=12, fig.height= 10}
+ikea_data_display <- data.frame(
+  Annual_Report = c(2019, 2020, 2021, 2022, 2023),
+  Base_year_2016 = c(25, 24, 27.8, 29.2, 31), # 2016 baseline total emissions
+  Report_year = c(24.9, 21.2, 26.2, 25.8, 24.1), # total emissions for report year
+  M2016 = c(9.5, 9.5, 12.1, 12.1, 12.1),
+  M_report_year = c(10.5, 9.6, 13.6, 13.5, 11.2), # Marterial
+  P2016 = c(3.0, 3.0, 2.9, 3.4, 3.5), 
+  P_report_year = c(2.8, 2.5, 2.1, 2.1, 2.4), # Production
+  PU2016 = c(6.4, 6.5, 6.4, 6.4, 8.0), 
+  PU_report_year = c(5.1, 4.7, 4.5, 3.5, 3.8), # Product use at home
+  TD2016 = c(2.5, 1.4, 1.5, 2.1, 2.1), 
+  TD_report_year = c(2.7, 1.3, 1.5, 2.1, 2.0) # Customer travel and deliveries
+)
+
+ikea_data_display %>%
+  kable("latex", caption = "IKEA Sustainability Annual Report Data (2019-2023)", booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "scale_down", "hold_position")) %>%
+  add_header_above(c(" " = 1, "Total Emissions" = 2, "Material" = 2, 
+                     "Production" = 2, "Product Use At Home" = 2, "Customer Travel & Deliveries" = 2))
+```
+Based on the table above, it becomes clear that IKEA has frequently revised its baseline year 2016 data in its sustainability reports, attributing these changes to adjustments in observation methods and calculation techniques. However, such frequent revisions lack consistency, complicating any objective assessment of their carbon emission reduction progress by external observers. In its report, IKEA claims to have achieved a 30% reduction in carbon emissions compared to 2016, doubling the initial target of a 15% reduction. Yet, upon examining the five-year emission trend, it becomes apparent that—except for the unusual dip in 2020 due to the pandemic—there has been no significant decline in IKEA's carbon emissions over this period. In fact, the emission numbers suggest the absence of a sustained downward trend.
+
+Given IKEA's significant influence, this inconsistency raises broader concerns about how carbon reductions are measured and reported, particularly by smaller companies. Thus, it is crucial for the EU or other relevant bodies to establish a standardized, scientifically grounded, and replicable carbon calculation methodology. Such a framework would ensure transparency, comparability, and sustained accountability, helping to accurately assess the real progress in emission reductions without the confusion caused by frequent changes to baseline data.
+
+```{r, fig.width=12, fig.height= 8}
+ikea_data <- data.frame(
+  Year = c(2019, 2020, 2021, 2022, 2023),
+  Base_Year_2016 = c(25, 24, 27.8, 29.2, 31),          
+  Total_Emissions = c(24.9, 21.2, 26.2, 25.8, 24.1)    
+)
+
+ikea_long <- ikea_data %>%
+  pivot_longer(cols = c(Base_Year_2016, Total_Emissions), 
+               names_to = "Type", 
+               values_to = "Emissions")
+
+combined_plot <- ggplot() +
+
+  geom_bar(data = ikea_long, aes(x = Year, y = Emissions, fill = Type), 
+           stat = "identity", position = "dodge", width = 0.7) +
+
+  geom_line(data = ikea_data, aes(x = Year, y = Total_Emissions, group = 1), 
+            color = "red", size = 1) +
+  geom_point(data = ikea_data, aes(x = Year, y = Total_Emissions), 
+             color = "red", size = 2) +
+
+  scale_fill_manual(values = c("Base_Year_2016" = "skyblue", "Total_Emissions" = "orange"),
+                    labels = c("Base Year 2016", "Reported Year Emissions")) +
+  labs(title = "Comparison of Base Year 2016 and Reported Year Emissions with Total Emissions Trend",
+       x = "Year",
+       y = "Emissions (Mt)") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+print(combined_plot)
+
+```
+In its annual reports, IKEA mentioned that they have taken several measures in different years to reduce carbon emissions, particularly in four categories: material production, product manufacturing, product use at home, and transportation and delivery. For example, in 2019, IKEA increased the use of renewable materials to reduce emissions from material production. In 2020, they improved production processes by enhancing energy efficiency and increasing the use of renewable energy. Additionally, in 2021, IKEA introduced the more energy-efficient SOLHETTA LED bulb, and in 2023, they began optimizing logistics to reduce carbon emissions from transportation. While these changes are positive, their overall impact remains relatively small. From the Sankey diagram, it can be observed that material production still accounts for the largest share of emissions, followed by product use at home, while transportation and product manufacturing are roughly equal.
+
+Due to the constant changes in the baseline 2016, it has become increasingly difficult to make direct comparisons, and the variations in the thickness of the Sankey diagram are not easy to observe clearly. Therefore, we chose to use five-year average, three-year rolling averages, and simple linear regression to reflect the overall trend of the data. Although this approach is somewhat rough, it allows us to observe the overall trend of emissions through linear regression and compare the positioning of the data within three-year and five-year structures using moving averages.
+
+The results show that despite IKEA's efforts since 2019 to implement various material-related strategies, the overall trend of material-related carbon emissions has still been increasing. However, it is encouraging to note that in 2023, this figure showed a significant decrease. Additionally, we found that IKEA demonstrated a certain level of sensitivity to data, as transportation-related carbon emissions continued to rise between 2021 and 2023, prompting them to take further steps to optimize transportation logistics in 2023. For the product use at home category, we observed a consistent downward trend, indicating that IKEA's efforts in this area have yielded significant results.
+
+However, regarding the manufacturing process, overall carbon emissions showed a downward trend, but there was a sudden increase in 2023. This may be an area that IKEA could continue to explore internally to understand the reasons behind it.
+
+In summary, although the effectiveness of various measures has fluctuated, IKEA's multi-dimensional efforts to reduce carbon emissions are evident. By utilizing moving averages and linear regression, we are able to capture the overall trend of carbon emissions and the changes at each stage. These analyses provide a deeper understanding of the challenges and achievements IKEA has faced in the emission reduction process, especially in the areas of material use, transportation, and product use at home. While there is still room for improvement, IKEA's ongoing strategy optimization and responsiveness to data trends offer a valuable example for other companies to follow.
+```{r, fig.width=12, fig.height= 8 }
+ikea_data_long <- ikea_data_display %>%
+  pivot_longer(cols = c(M_report_year, P_report_year, PU_report_year, TD_report_year),
+               names_to = "Category", values_to = "Emissions") %>%
+  mutate(Year = rep(2019:2023, each = 4)) %>%
+  mutate(Category = recode(Category,
+                           "M_report_year" = "Material Production",
+                           "P_report_year" = "Product Manufacturing",
+                           "PU_report_year" = "Product Use at Home",
+                           "TD_report_year" = "Transportation and Deliveries"))
+sankey_data <- ikea_data_long %>%
+  mutate(Year = as.factor(Year)) %>%
+  group_by(Year, Category) %>%
+  summarise(Total_Emissions = sum(Emissions)) %>%
+  ungroup()
+
+ggplot(sankey_data, aes(axis1 = Year, axis2 = Category, y = Total_Emissions)) +
+  geom_alluvium(aes(fill = Category)) +
+  geom_stratum() +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  labs(title = "Sankey Diagram of IKEA Carbon Emissions by Year and Category",
+       x = "Year and Category",
+       y = "Total Emissions (Mt CO2 eq)") +
+  theme_minimal()
+
+
+ikea_facet_data <- ikea_data_display %>%
+  pivot_longer(cols = c(M_report_year, P_report_year, PU_report_year, TD_report_year),
+               names_to = "Category", values_to = "Emissions") %>%
+  mutate(Year = as.numeric(rep(2019:2023, each = 4))) %>%
+  mutate(Category = recode(Category,
+                           "M_report_year" = "Material Production",
+                           "P_report_year" = "Product Manufacturing",
+                           "PU_report_year" = "Product Use at Home",
+                           "TD_report_year" = "Transportation and Deliveries"))
+
+three_year_average <- ikea_facet_data %>%
+  group_by(Category) %>%
+  mutate(Three_Year_Average = zoo::rollmean(Emissions, k = 3, fill = NA, align = "right")) %>%
+  ungroup()
+
+five_year_average <- ikea_facet_data %>%
+  group_by(Category) %>%
+  summarise(Five_Year_Average = mean(Emissions))
+
+scatter_facet_plot <- ggplot(three_year_average, aes(x = Year, y = Emissions, color = Category)) +
+  geom_point(size = 3) + 
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", color = "red", aes(fill = Category)) + 
+  geom_line(aes(y = Three_Year_Average, group = Category), linetype = "solid", color = "blue", size = 1) + 
+  geom_hline(data = five_year_average, aes(yintercept = Five_Year_Average, color = Category), linetype = "dotted", size = 1) + 
+  facet_wrap(~ Category, scales = "free_y") + 
+  labs(x = "Year",
+       y = "Emissions (Mt CO2 eq)",
+       title = "Emissions Trends for IKEA Categories (2019-2023): Linear Regression, Moving Averages, and Overall Patterns",
+       color = "Category",
+       caption = "Dashed Line: Linear Regression | Solid Line: Three-Year Moving Average | Dotted Line: Five-Year Average") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom")
+
+print(scatter_facet_plot)
+```
+# Conclusion: Insights for Future
+
+The analysis presented in this report highlights that global carbon emission issues are concentrated in key regions such as the United States, China, Russia, and Europe. The economic scale, level of industrialization, and energy demands of these regions make them highly influential in the realm of carbon emissions. Europe, in particular, plays a crucial role in global climate action, demonstrated by its proactive leadership in sustainability initiatives, such as the Paris Agreement and the European Green Deal.
+
+The examination of Nordic countries reveals unique characteristics in their carbon emission structures and reduction strategies, showcasing significant progress through varied energy mixes and emission reduction approaches. These countries' experiences, characterized by the adoption of renewable energy and the reduction of fossil fuel dependence, provide valuable insights for other nations aiming to reduce carbon emissions effectively.
+
+At the corporate level, the case study of IKEA highlights the challenges associated with transparency in reporting. Despite IKEA's claims of progress in carbon reduction, the overall trend does not exhibit significant and sustained decreases, emphasizing the need for more standardized and scientifically grounded carbon accounting methods to ensure transparency and reliability in corporate emission reporting, ultimately fostering more effective global reduction efforts.
+
+On the other hand, due to the constant changes in the baseline data since 2016, direct comparisons have become challenging. As a result, we adopted alternative methods like five-year averages, three-year rolling averages, and linear regression to better understand emission trends. Despite IKEA's ongoing efforts, some categories still show upward trends, while others have achieved successful reductions. Overall, IKEA's proactive adjustments reflect their commitment to reducing carbon emissions and offer valuable insights for other companies with similar goals. In key areas such as material production, product manufacturing, product use at home, and transportation, IKEA has implemented a series of initiatives, including increasing the proportion of recycled and recyclable materials, improving energy efficiency, and optimizing logistics. These actions demonstrate IKEA's proactive approach, with strategic adjustments that have positively impacted emissions reduction in these projects. Furthermore, the report identifies trends that can be further improved to strengthen their sustainability efforts.
+
+Overall, global efforts to reduce carbon emissions require multi-level, cross-sector collaboration—from national and regional policy leadership to innovative corporate practices, every effort plays a crucial role. Leadership from regions like Europe and Nordic countries, along with proactive corporate initiatives like those of IKEA, are vital in driving sustainable development and combating climate change globally, underscoring the importance of data-driven decision-making in achieving carbon neutrality.
